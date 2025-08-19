@@ -1,0 +1,20 @@
+# Email Service Configuration
+# Choose one of the following email services and configure accordingly
+
+# For SendGrid
+SENDGRID_API_KEY=your_sendgrid_api_key_here
+SENDGRID_API_URL=https://api.sendgrid.com/v3/mail/send
+
+# For Mailgun
+MAILGUN_API_KEY=your_mailgun_api_key_here
+MAILGUN_API_URL=https://api.mailgun.net/v3/yourdomain.com/messages
+
+# For Custom Email Server/Webhook
+CUSTOM_EMAIL_API_URL=https://your-email-server.com/api/send
+CUSTOM_EMAIL_API_KEY=your_custom_api_key_here
+
+# General Email Configuration
+FROM_EMAIL=noreply@yourcompany.com
+
+# OpenAI Configuration (if not already set)
+OPENAI_API_KEY=your_openai_api_key_here

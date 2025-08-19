@@ -13,4 +13,5 @@ dependencies = [
     "langgraph",
     "python-dotenv",
     "dotenv>=0.9.9",
+    "requests>=2.32.5",
 ]

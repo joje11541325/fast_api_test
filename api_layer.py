@@ -1,6 +1,5 @@
-"""This api"""
-from fastapi import FastAPI, Path, Query, HTTPException, status
-from typing import Optional
+"""This api is the layer that interacts with the user"""
+from fastapi import FastAPI, Path, HTTPException, status
 from email_agent import graph
 from classes import Email
 
@@ -9,11 +8,10 @@ app = FastAPI()
 emails = {}
 
 
-@app.post("/draft-email/{email_id}")
-def draft_email(email_id: int, email: Email = None):
-    emails[email_id] = email
+@app.post("/draft-email")
+def draft_email(email: Email = None):
     result = graph.invoke({"email": email})
-    return result
+    return {"category": result["category"], "actions_needed": result["actions_needed"], "reasoning": result["reasoning"]}
 
 
 @app.get("/find-email/{email_id}")
