@@ -1,24 +1,19 @@
 """This api"""
 from fastapi import FastAPI, Path, Query, HTTPException, status
-from pydantic import BaseModel
 from typing import Optional
+from email_agent import graph
+from classes import Email
 
 app = FastAPI()
 
 emails = {}
 
 
-class Email(BaseModel):
-    """give more"""
-    subject: Optional[str] = None
-    body: Optional[str] = None
-    email: Optional[str] = None
-
-
 @app.post("/draft-email/{email_id}")
 def draft_email(email_id: int, email: Email = None):
     emails[email_id] = email
-    return emails[email_id]
+    result = graph.invoke({"email": email})
+    return result
 
 
 @app.get("/find-email/{email_id}")

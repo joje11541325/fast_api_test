@@ -8,4 +8,9 @@ dependencies = [
     "fastapi>=0.116.1",
     "pydantic>=2.11.7",
     "uvicorn>=0.35.0",
+    "langchain-openai>=0.1.0",
+    "langchain-core>=0.2.0",
+    "langgraph",
+    "python-dotenv",
+    "dotenv>=0.9.9",
 ]
