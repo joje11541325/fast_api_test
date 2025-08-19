@@ -1,0 +1,13 @@
+# Environment Variables Example
+# Copy this file to .env and fill in your actual values
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Email Service Configuration (if using email services)
+SENDGRID_API_KEY=your_sendgrid_api_key_here
+MAILGUN_API_KEY=your_mailgun_api_key_here
+FROM_EMAIL=noreply@yourcompany.com
+
+# Webhook URL (if using webhook for email sending)
+WEBHOOK_URL=https://your-webhook-url.com
