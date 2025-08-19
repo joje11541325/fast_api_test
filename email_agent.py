@@ -20,6 +20,8 @@ class AgentState(TypedDict):
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
+tools = [price_list_tool, services_list_tool]
+tool_llm = llm.bind_tools(tools)
 
 
 class classification(BaseModel):
@@ -28,20 +30,41 @@ class classification(BaseModel):
     reasoning: str
 
 
+def price_list_tool():
+    """
+    Returns a very detailed price list for the companys services.
+    """
+    print("price_list_tool")
+    with open("company_info/prislista.txt", "r") as file:
+        price_list = file.read()
+    return price_list
+
+
+def services_list_tool():
+    """
+    Returns a very detailed price list for the companys services.
+    """
+    print("services_list_tool")
+    with open("company_info/prislista.txt", "r") as file:
+        price_list = file.read()
+    return price_list
+
+
 def classification_agent(state: AgentState):
     with open("company_info/email_response_guide.txt", "r") as file:
         email_guide = file.read()
 
-    sys_msg = SystemMessage(f"""You are an email classification agent that classifies emails based on intent. Your objective is to read the incoming email, and think carefully about what the intent is. 
-                Then you assign the emails category, actions needed to respond including potential tool calls, and in short your reasoning behind it.
-                Here is the email response guide:
+    sys_msg = SystemMessage(f"""You are an email agent for a swedish nail salon that answeres inquires and questions and bookds and changes appointments. 
+    Your objective is to read the incoming email, and think carefully about what the intent is. And provide the customer with the best possible answer to their question.
+    You can also tools to book and change appointments, get the price list for the company, and get the opening hours for the company.
+    Here is the email response guide:
                 {email_guide}
     
                 Here is the email:
                 Subject: {state["email"].subject}
                 body: {state["email"].body}
                 email address: {state["email"].email}""")
-    result = llm.with_structured_output(classification).invoke([sys_msg])
+    result = tool_llm.with_structured_output(Email).invoke([sys_msg])
     return {"category": result.category, "actions_needed": result.actions_needed, "reasoning": result.reasoning}
 
 
