@@ -1,27 +1,24 @@
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from pydantic import BaseModel
 from typing import Optional
 from typing import TypedDict
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START, END, MessagesState
 from dotenv import load_dotenv
 from classes import Email
+from tools import get_price_list, get_services_list, get_opening_hours, check_availability, book_appointment, reschedule_appointment
 import requests
 import os
 
 load_dotenv()
 
 
-class AgentState(TypedDict):
+class AgentState(MessagesState):
     email: Email
     category: Optional[str] = None
     actions_needed: Optional[str] = None
     reasoning: Optional[str] = None
-
-
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
-tools = [price_list_tool, services_list_tool]
-tool_llm = llm.bind_tools(tools)
+    tool_results: Optional[list] = None
 
 
 class classification(BaseModel):
@@ -30,42 +27,63 @@ class classification(BaseModel):
     reasoning: str
 
 
-def price_list_tool():
-    """
-    Returns a very detailed price list for the companys services.
-    """
-    print("price_list_tool")
-    with open("company_info/prislista.txt", "r") as file:
-        price_list = file.read()
-    return price_list
-
-
-def services_list_tool():
-    """
-    Returns a very detailed price list for the companys services.
-    """
-    print("services_list_tool")
-    with open("company_info/prislista.txt", "r") as file:
-        price_list = file.read()
-    return price_list
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
+# Import all tools from tools.py
+tools = [get_price_list, get_services_list, get_opening_hours,
+         check_availability, book_appointment, reschedule_appointment]
+tool_llm = llm.bind_tools(tools)
 
 
 def classification_agent(state: AgentState):
     with open("company_info/email_response_guide.txt", "r") as file:
         email_guide = file.read()
 
-    sys_msg = SystemMessage(f"""You are an email agent for a swedish nail salon that answeres inquires and questions and bookds and changes appointments. 
-    Your objective is to read the incoming email, and think carefully about what the intent is. And provide the customer with the best possible answer to their question.
-    You can also tools to book and change appointments, get the price list for the company, and get the opening hours for the company.
-    Here is the email response guide:
-                {email_guide}
+    # First, let the agent analyze the email and decide if tools are needed
+    analysis_sys_msg = SystemMessage(f"""You are an email agent for a Swedish nail salon that answers inquiries and questions and books and changes appointments. 
     
-                Here is the email:
-                Subject: {state["email"].subject}
-                body: {state["email"].body}
-                email address: {state["email"].email}""")
-    result = tool_llm.with_structured_output(Email).invoke([sys_msg])
-    return {"category": result.category, "actions_needed": result.actions_needed, "reasoning": result.reasoning}
+    Your first task is to analyze the incoming email and determine:
+    1. What the customer is asking for
+    2. Whether you need to use any tools to get information before responding
+    3. What tools would be most helpful
+    
+    Available tools:
+    - get_price_list: Use when customers ask about prices or costs
+    - get_services_list: Use when customers ask about available services
+    - get_opening_hours: Use when customers ask about when you're open
+    - check_availability: Use when customers want to check if a time slot is available
+    - book_appointment: Use when customers want to schedule an appointment
+    - reschedule_appointment: Use when customers want to change an existing appointment
+    
+    Email response guide:
+    {email_guide}
+    
+    Email to analyze:
+    Subject: {state["email"].subject}
+    Body: {state["email"].body}
+    Email address: {state["email"].email}
+    
+    Think step by step about what the customer needs and which tools would help you provide the best response.""")
+
+    # Get the agent's analysis and tool usage decision
+    analysis_result = tool_llm.invoke([analysis_sys_msg])
+
+    return {"messages": [analysis_result]}
+
+
+def tool_node(state: AgentState):
+    if state["messages"][-1].tool_calls:
+        for tool_call in state["messages"][-1].tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            tool_result = tools[tool_name](**tool_args)
+            state["tool_results"].append(tool_result)
+    return {"messages": [state["messages"][-1]]}
+
+
+def write_email_agent(state: AgentState):
+    if state["tool_results"]:
+        state["email"].body = state["tool_results"]
+    return {"messages": [state["messages"][-1]]}
 
 
 def send_email_agent(state: AgentState):
@@ -76,8 +94,8 @@ def send_email_agent(state: AgentState):
         url = "https://hook.eu2.make.com/2ni3fi07m5b6x4ebqj4vsfiz58z256eh"
         data = {
             "To": state["email"].email,
-            "subject": state["category"],
-            "body": state["actions_needed"]
+            "subject": state["email"].subject,
+            "body": state["email"].body
         }
         print(f"data for email: {data}")
         response = requests.post(url, json=data, timeout=30)
@@ -120,9 +138,11 @@ def send_email_agent(state: AgentState):
 
 builder = StateGraph(AgentState)
 builder.add_node("classification", classification_agent)
+builder.add_node("tool", tool_node)
 builder.add_node("send_email", send_email_agent)
 builder.add_edge(START, "classification")
-builder.add_edge("classification", "send_email")
+builder.add_edge("classification", "tool")
+builder.add_edge("tool", "send_email")
 builder.add_edge("send_email", END)
 graph = builder.compile()
 
