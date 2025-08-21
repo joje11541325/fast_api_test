@@ -1,5 +1,7 @@
 from langchain_core.tools import tool
 from typing import Optional
+import datetime
+import requests
 
 
 @tool
@@ -48,18 +50,42 @@ def get_opening_hours() -> str:
     return opening_hours
 
 
-@tool
-def check_availability(date: str, time: str) -> str:
+def check_availability(from_date: str, to_date: str) -> str:
     """
     Check availability for a specific date and time.
     Use this when customers want to book an appointment.
 
     Args:
-        date: The date in format YYYY-MM-DD
-        time: The time in format HH:MM (24-hour format)
+        from_date: The start date in format YYYY-MM-DD HH:MM
+        to_date: The end date in format YYYY-MM-DD HH:MM
     """
     # This is a placeholder - in a real implementation, you'd check against a booking system
-    return f"Checking availability for {date} at {time}... Please note that this is a demo system. For actual bookings, please contact us directly or use our online booking system."
+    from_date = str(from_date)
+    to_date = str(to_date)
+    try:
+        url = "https://hook.eu2.make.com/1g5yvvf6j38zha7ncnm9jafsv05lq9iu"
+        data = {
+            "from_date": from_date,
+            "to_date": to_date
+        }
+        print(f"data for availability check: {data}")
+        response = requests.post(url, json=data, timeout=30)
+        print(f"Response status: {response.status_code}")
+        print(f"Response content: {response.text}")
+
+        if response.status_code == 200:
+            # Check if response has content before trying to parse JSON
+            if response.text.strip():
+                try:
+                    return response.json()
+                except ValueError as json_error:
+                    return f"Availability check completed but received invalid response: {response.text}"
+            else:
+                return "Availability check completed successfully (no data returned)"
+        else:
+            return f"Availability check failed with status code: {response.status_code}"
+    except Exception as e:
+        return f"Availability check failed: {e}"
 
 
 @tool
@@ -94,3 +120,7 @@ def reschedule_appointment(original_date: str, original_time: str, new_date: str
     """
     # This is a placeholder - in a real implementation, you'd update the booking system
     return f"Appointment rescheduled from {original_date} at {original_time} to {new_date} at {new_time}. A confirmation email has been sent to {email}."
+
+
+if __name__ == "__main__":
+    print(check_availability("2025-08-10", "2025-08-21"))
