@@ -2,13 +2,13 @@ from langchain_core.tools import tool
 from typing import Optional
 import datetime
 import requests
+from classes import AgentState, tool_calls
 
 
-@tool
-def get_price_list() -> str:
+def get_price_and_service_list() -> str:
     """
-    Returns a very detailed price list for the company's services.
-    Use this when customers ask about prices, costs, or pricing information.
+    Returns a very detailed list of the auto repair shops services including prices.
+    Use this when customers ask about prices, costs, or  information about services.
     """
     try:
         with open("company_info/prislista.txt", "r", encoding="utf-8") as file:
@@ -18,38 +18,22 @@ def get_price_list() -> str:
         return "Price list not available at the moment. Please contact us directly for pricing information."
 
 
-@tool
-def get_services_list() -> str:
+
+
+
+def get_general_info() -> str:
     """
-    Returns a detailed list of services offered by the company.
-    Use this when customers ask about available services or what you offer.
+    Returns the general information for the auto repair shop.
+    Use this when customers ask about general information, such as opening hours, location, contact information, etc.
     """
     try:
-        with open("company_info/prislista.txt", "r", encoding="utf-8") as file:
-            services = file.read()
-        return f"Here are our available services:\n\n{services}"
+        with open("company_info/general_info.txt", "r", encoding="utf-8") as file:
+            general_info = file.read()
+        return general_info
     except FileNotFoundError:
-        return "Services list not available at the moment. Please contact us directly for information about our services."
-
+        return "General information not available at the moment. Please contact us directly for information."   
 
 @tool
-def get_opening_hours() -> str:
-    """
-    Returns the opening hours for the nail salon.
-    Use this when customers ask about when you're open or available hours.
-    """
-    # You can either read from a file or hardcode this information
-    opening_hours = """
-    Our opening hours:
-    Monday - Friday: 9:00 AM - 7:00 PM
-    Saturday: 9:00 AM - 5:00 PM
-    Sunday: Closed
-    
-    We recommend booking appointments in advance to ensure availability.
-    """
-    return opening_hours
-
-
 def check_availability(from_date: str, to_date: str) -> str:
     """
     Check availability for a specific date and time.
@@ -102,7 +86,7 @@ def book_appointment(customer_name: str, service: str, date: str, time: str, ema
         email: The customer's email address
     """
     # This is a placeholder - in a real implementation, you'd integrate with a booking system
-    return f"Appointment booked for {customer_name} on {date} at {time} for {service}. A confirmation email has been sent to {email}. Please arrive 10 minutes before your appointment time."
+    return f"Appointment booked for {customer_name} on {date} at {time} for {service}. A confirmation email has been sent to {email}."
 
 
 @tool
@@ -121,6 +105,34 @@ def reschedule_appointment(original_date: str, original_time: str, new_date: str
     # This is a placeholder - in a real implementation, you'd update the booking system
     return f"Appointment rescheduled from {original_date} at {original_time} to {new_date} at {new_time}. A confirmation email has been sent to {email}."
 
+@tool
+def cancel_appointment(date: str, time: str, email: str) -> str:
+    """
+    Cancel an existing appointment.
+    Use this when customers want to cancel an appointment.
+    """
+    return f"Appointment cancelled for {date} at {time}. A confirmation email has been sent to {email}."
+
+@tool
+def create_quote(car_brand : str, registration_number : str, service : str) -> str:
+    """
+    Creates a custom quote for a service.
+    Use this when customers want to get a quote for a service.
+    """
+    return f"Quote created for {car_brand} {registration_number} for {service}. Time to complete the service is 1 hour. Cost of the service is 10000 SEK."
+
+tools = [get_price_and_service_list, get_general_info, check_availability, book_appointment, reschedule_appointment, cancel_appointment, create_quote]
+
+
+def tool_node(state: AgentState):
+    if state["messages"][-1].tool_calls:
+        for tool_call in state["messages"][-1].tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            tool_result = tools[tool_name](**tool_args)
+            state["tool_calls"].append(tool_calls(name=tool_name, args=tool_args, result=tool_result))
+            return {"messages": }
+    return {"messages": [state["messages"][-1]]}
 
 if __name__ == "__main__":
     print(check_availability("2025-08-10", "2025-08-21"))

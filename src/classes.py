@@ -1,12 +1,25 @@
 from openai.types.responses import response_reasoning_item
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
+from langgraph.graph import MessagesState
 
+
+
+class AgentState(MessagesState):
+    email: Email
+    category: classification_output = None
+    tool_calls: list[tool_calls] = []
+    email_response : str
+
+class tool_calls(BaseModel):
+    name: str
+    args: dict
+    result: str
 
 class classification_output(BaseModel):
     """Base classification output class"""
-    classification: Literal["Booking inquiries",
-                            "price or serviceinquiries", "General/other inquiries"] = None
+    category: Literal["Booking inquiries",
+                            "Price or service inquiries", "General/other inquiries"] = None
     reasoning: Optional[str] = None
 
 
