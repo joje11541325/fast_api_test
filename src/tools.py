@@ -3,6 +3,7 @@ from typing import Optional
 import datetime
 import requests
 from classes import AgentState, tool_calls
+from langchain_core.messages import ToolMessage
 
 
 def get_price_and_service_list() -> str:
@@ -11,7 +12,7 @@ def get_price_and_service_list() -> str:
     Use this when customers ask about prices, costs, or  information about services.
     """
     try:
-        with open("company_info/prislista.txt", "r", encoding="utf-8") as file:
+        with open("company_resources/prislista.txt", "r", encoding="utf-8") as file:
             price_list = file.read()
         return f"Here is our current price list:\n\n{price_list}"
     except FileNotFoundError:
@@ -27,7 +28,7 @@ def get_general_info() -> str:
     Use this when customers ask about general information, such as opening hours, location, contact information, etc.
     """
     try:
-        with open("company_info/general_info.txt", "r", encoding="utf-8") as file:
+        with open("company_resources/general_info.txt", "r", encoding="utf-8") as file:
             general_info = file.read()
         return general_info
     except FileNotFoundError:
@@ -73,20 +74,19 @@ def check_availability(from_date: str, to_date: str) -> str:
 
 
 @tool
-def book_appointment(customer_name: str, service: str, date: str, time: str, email: str) -> str:
+def book_appointment(customer_email: str, service: str, date: str, time: str) -> str:
     """
     Book an appointment for a customer.
     Use this when customers want to schedule an appointment.
 
     Args:
-        customer_name: The name of the customer
+        customer_email: The customer's email address
         service: The service they want to book
-        date: The date in format YYYY-MM-DD
-        time: The time in format HH:MM (24-hour format)
-        email: The customer's email address
+        date: The date provided by the customer
+        time: The time provided by the customer
     """
     # This is a placeholder - in a real implementation, you'd integrate with a booking system
-    return f"Appointment booked for {customer_name} on {date} at {time} for {service}. A confirmation email has been sent to {email}."
+    return f"Appointment booked for {customer_email} on {date} at {time} for {service}. A confirmation email has been sent to {customer_email}."
 
 
 @tool
@@ -125,14 +125,54 @@ tools = [get_price_and_service_list, get_general_info, check_availability, book_
 
 
 def tool_node(state: AgentState):
-    if state["messages"][-1].tool_calls:
+    print("=== TOOL NODE ===")
+    print("Checking for tool calls in the last message...")
+    
+    if state["messages"] and state["messages"][-1].tool_calls:
+        print(f"Found {len(state['messages'][-1].tool_calls)} tool call(s)")
+        # Create a mapping of tool names to functions
+        tool_map = {
+            "check_availability": check_availability,
+            "book_appointment": book_appointment,
+            "reschedule_appointment": reschedule_appointment,
+            "cancel_appointment": cancel_appointment,
+            "create_quote": create_quote
+        }
+        
+        # Get the current messages and add tool results
+        updated_messages = state["messages"].copy()
+        
         for tool_call in state["messages"][-1].tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            tool_result = tools[tool_name](**tool_args)
-            state["tool_calls"].append(tool_calls(name=tool_name, args=tool_args, result=tool_result))
-            return {"messages": }
-    return {"messages": [state["messages"][-1]]}
+            print(f"Executing tool: {tool_name}")
+            print(f"Tool arguments: {tool_args}")
+            
+            if tool_name in tool_map:
+                # Use .invoke() method for LangChain tools
+                tool_result = tool_map[tool_name].invoke(tool_args)
+                print(f"Tool result: {tool_result}")
+                
+                # Create a ToolMessage and append it to messages
+                tool_message = ToolMessage(
+                    content=tool_result,
+                    tool_call_id=tool_call["id"]
+                )
+                updated_messages.append(tool_message)
+                
+                # Also add tool call to state for tracking
+                if "tool_calls" not in state:
+                    state["tool_calls"] = []
+                state["tool_calls"].append(tool_calls(name=tool_name, args=tool_args, result=tool_result))
+            else:
+                print(f"Warning: Tool '{tool_name}' not found in tool map")
+        
+        print("=== END TOOL NODE ===\n")
+        return {"messages": updated_messages}
+    else:
+        print("No tool calls found in the last message")
+        print("=== END TOOL NODE ===\n")
+        return {"messages": state["messages"]}
 
 if __name__ == "__main__":
     print(check_availability("2025-08-10", "2025-08-21"))
