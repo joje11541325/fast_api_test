@@ -1,6 +1,6 @@
 import email
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 from dotenv import load_dotenv
 from classes import Email, AgentState, classification_output
@@ -65,14 +65,30 @@ def booking_agent(state: AgentState):
     If the email does not contain all necesary information, you must ask the user for the missing information.
     If the email contains all necesary information, you must use the specific booking tool to book an appointment, rebook an appointment or cancel an appointment.
     You must then respond back to the email to the user with the result of the booking tool.""")
-    booking_email  = HumanMessage(f"""Email to process:
-    Subject: {state["email"].subject}
-    Body: {state["email"].body}
-    Email address: {state["email"].email}""")
-    booking_result = booking_llm.invoke([booking_sys_msg, booking_email])
+    
+    # If we have existing messages, use them as conversation history
+    if state.get("messages"):
+        # Use existing conversation history
+        messages = [booking_sys_msg] + state["messages"]
+        booking_result = booking_llm.invoke(messages)
+    else:
+        # First time processing - create new conversation
+        booking_email = HumanMessage(f"""Email to process:
+        Subject: {state["email"].subject}
+        Body: {state["email"].body}
+        Email address: {state["email"].email}""")
+        booking_result = booking_llm.invoke([booking_sys_msg, booking_email])
+    
     print("booking_result", booking_result)
     print("=== END BOOKING AGENT ===\n")
-    return {"messages": [booking_sys_msg, booking_email, booking_result], "email_response": booking_result.content}
+    
+    # Update messages with the new result
+    if state.get("messages"):
+        updated_messages = state["messages"] + [booking_result]
+    else:
+        updated_messages = [booking_sys_msg, booking_email, booking_result]
+    
+    return {"messages": updated_messages, "email_response": booking_result.content}
 
 quote_tool = [create_quote]
 service_llm = llm.bind_tools(quote_tool)
@@ -89,13 +105,29 @@ def service_agent(state: AgentState):
     Here is the service list with prices:
     {get_price_and_service_list()}
     """)
-    customer_email = HumanMessage(f"""Email to process:
-    Subject: {state["email"].subject}
-    Body: {state["email"].body}
-    Email address: {state["email"].email}""")
-    service_result = service_llm.invoke([service_sys_msg, customer_email])
+    
+    # If we have existing messages, use them as conversation history
+    if state.get("messages"):
+        # Use existing conversation history
+        messages = [service_sys_msg] + state["messages"]
+        service_result = service_llm.invoke(messages)
+    else:
+        # First time processing - create new conversation
+        customer_email = HumanMessage(f"""Email to process:
+        Subject: {state["email"].subject}
+        Body: {state["email"].body}
+        Email address: {state["email"].email}""")
+        service_result = service_llm.invoke([service_sys_msg, customer_email])
+    
     print("=== END SERVICE AGENT ===\n")
-    return {"messages": [service_sys_msg, customer_email, service_result], "email_response": service_result.content}
+    
+    # Update messages with the new result
+    if state.get("messages"):
+        updated_messages = state["messages"] + [service_result]
+    else:
+        updated_messages = [service_sys_msg, customer_email, service_result]
+    
+    return {"messages": updated_messages, "email_response": service_result.content}
 
 
 def general_agent(state: AgentState):
@@ -110,13 +142,29 @@ def general_agent(state: AgentState):
     Here is the general information:
     {get_general_info()}
     """)
-    customer_email = HumanMessage(f"""Email to process:
-    Subject: {state["email"].subject}
-    Body: {state["email"].body}
-    Email address: {state["email"].email}""")
-    general_result = llm.invoke([general_sys_msg, customer_email])
+    
+    # If we have existing messages, use them as conversation history
+    if state.get("messages"):
+        # Use existing conversation history
+        messages = [general_sys_msg] + state["messages"]
+        general_result = llm.invoke(messages)
+    else:
+        # First time processing - create new conversation
+        customer_email = HumanMessage(f"""Email to process:
+        Subject: {state["email"].subject}
+        Body: {state["email"].body}
+        Email address: {state["email"].email}""")
+        general_result = llm.invoke([general_sys_msg, customer_email])
+    
     print("=== END GENERAL AGENT ===\n")
-    return {"messages": [general_sys_msg, customer_email, general_result], "email_response": general_result.content}
+    
+    # Update messages with the new result
+    if state.get("messages"):
+        updated_messages = state["messages"] + [general_result]
+    else:
+        updated_messages = [general_sys_msg, customer_email, general_result]
+    
+    return {"messages": updated_messages, "email_response": general_result.content}
 
 def tool_conditional(state: AgentState):
     print("=== TOOL CONDITIONAL ===")
@@ -125,11 +173,9 @@ def tool_conditional(state: AgentState):
     # Check if any message in the history has tool calls
     has_tool_calls = False
     if state["messages"]:
-        # Look for AIMessages with tool_calls in the message history
-        for message in state["messages"]:
-            if hasattr(message, 'tool_calls') and message.tool_calls:
-                has_tool_calls = True
-                break
+        # Look for ToolMessages in last message
+        if isinstance(state["messages"][-1], ToolMessage):
+            has_tool_calls = True
     
     if has_tool_calls:
         print("Tool calls detected - routing back to appropriate agent")
@@ -236,6 +282,15 @@ def main():
     result = graph.invoke({"email": Email(subject="Boka tid för besiktning",
     body="Hej jag skulle vilja boka en tid för besiktning den 21a augusti kl 15, finns det en ledig tid? Mvh Jonathan", email="jhedenrud02@gmail.com")})
     print(result)
+    
+    try:
+        mermaid_png = graph.get_graph(xray=True).draw_mermaid_png()
+        with open("graph_visualization.png", "wb") as f:
+            f.write(mermaid_png)
+        print("Graph visualization saved as graph_visualization.png")
+    except Exception as e:
+        print(f"Could not save Mermaid graph: {e}")
+    print("=== END MAIN ===")
 
 
 if __name__ == "__main__":
